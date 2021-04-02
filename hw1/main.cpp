@@ -1,11 +1,13 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <regex>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <pwd.h>
+#include <sys/types.h>
 #include <errno.h>
 #include <vector>
-#include <algorithm>
 #include <unistd.h>
 #include "utils.h"
 #define BUF_SIZE 1024
@@ -16,38 +18,73 @@ vector<path_pid> process_dir;
 
 void get_command(string* COMMAND, string PID)
 {
+    ifstream fin;
     char buff[BUF_SIZE];
-    FILE* fp = fopen(string("/proc/" + PID + "/status").c_str(), "r");
-    if (fp != NULL)
-    {
-        if( fgets(buff, BUF_SIZE-1, fp)== NULL ){
-            fclose(fp);
-        }
-        fclose(fp);
-        string tmp_str = string(buff);
-        tmp_str = tmp_str.substr(6);
-        tmp_str = tmp_str.substr(0, tmp_str.length() - 1);
-        *COMMAND = tmp_str;
+    string dir = string("/proc/" + PID + "/comm");
+    fin.open(dir.c_str(), ios::in);
+    if(!fin.is_open()){
+        cout << "[ERROR: " << errno << " ] Couldn't open " << dir << "." << endl;
+        return;
     }
+    fin.read(buff, sizeof(buff));
+    regex newline("\n+");
+    auto result = regex_replace(string(buff), newline, "");
+    *COMMAND = result;
 }
 
-void get_cwd_info(string* FD)
+void get_user(string* USER, string PID)
 {
-    
+    uid_t UID = 0;
+    struct stat fileInfo;
+    stat(string("/proc/" + PID + "/exe").c_str(), &fileInfo);
+    UID = fileInfo.st_uid;
+    struct passwd *user;
+    user = getpwuid(UID);
+    *USER = user->pw_name;
 }
-void get_root_info(vector<string> &files)
-{
 
+void get_inode(string* NODE, string dir)
+{
+    struct stat fileinfo;
+    stat(dir.c_str(), &fileinfo);
+    *NODE = to_string(fileinfo.st_ino);
 }
-void get_exe_info(string *NAME, string PID)
+
+void get_cwd_info(string* NAME, string* NODE, string PID)
 {
     char buff[1024];
-    ssize_t len = readlink(string("/proc/" + PID + "/exe").c_str(), buff, sizeof(buff) - 1);
+    string dir = string("/proc/" + PID + "/cwd");
+    ssize_t len = readlink(dir.c_str(), buff, sizeof(buff) - 1);
     if (len != -1)
     {
         buff[len] = '\0';
         *NAME = string(buff);
     }
+    get_inode(NODE, dir);
+}
+void get_root_info(string* NAME, string* NODE, string PID)
+{
+    char buff[1024];
+    string dir = string("/proc/" + PID + "/root");
+    ssize_t len = readlink(dir.c_str(), buff, sizeof(buff) - 1);
+    if (len != -1)
+    {
+        buff[len] = '\0';
+        *NAME = string(buff);
+    }
+    get_inode(NODE, dir);
+}
+void get_exe_info(string *NAME, string* NODE, string PID)
+{
+    char buff[1024];
+    string dir = string("/proc/" + PID + "/exe");
+    ssize_t len = readlink(dir.c_str(), buff, sizeof(buff) - 1);
+    if (len != -1)
+    {
+        buff[len] = '\0';
+        *NAME = string(buff);
+    }
+    get_inode(NODE, dir);
 }
 void get_mem_info(vector<string> &files)
 {
@@ -119,16 +156,19 @@ void get_process_info(path_pid dir)
     }
 
     get_command(&COMMAND, PID);
+    get_user(&USER, PID);
     // six steps to deal with: cwd, root, exe, mem, (del,) rwu, nofd
     // 1. cwd
-    // get_cwd_info();
+    get_cwd_info(&NAME, &NODE, PID);
+    print(COMMAND + "\t\t\t" + PID + "\t\t" + USER + "\t\tcwd\t\t" + TYPE + "\t\t" + NODE + "\t\t" + NAME);
 
     // 2. root
-    // get_root_info();
+    get_root_info(&NAME, &NODE, PID);
+    print(COMMAND + "\t\t\t" + PID + "\t\t" + USER + "\t\troot\t\t" + TYPE + "\t\t" + NODE + "\t\t" + NAME);
 
     // 3. exe
-    get_exe_info(&NAME, PID);
-    print(COMMAND + "\t\t\t" + PID + "\t\t\t\texe\t\t" + TYPE + "\t\t\t" + NAME);
+    get_exe_info(&NAME, &NODE, PID);
+    print(COMMAND + "\t\t\t" + PID + "\t\t" + USER + "\t\texe\t\t" + TYPE + "\t\t" + NODE + "\t\t" + NAME);
     
     // 4. mem
     // get_mem_info();
