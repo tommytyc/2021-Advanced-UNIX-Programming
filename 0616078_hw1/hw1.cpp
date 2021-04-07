@@ -11,6 +11,7 @@
 #include <vector>
 #include <unistd.h>
 #include <iomanip>
+#include <algorithm>
 #include "utils.h"
 #define BUF_SIZE 1024
 
@@ -19,28 +20,42 @@ using namespace std;
 vector<path_pid> process_dir;
 vector<line> lines;
 
-void get_command(string *COMMAND, string PID)
+bool get_command(string *COMMAND, string PID)
 {
     ifstream fin("/proc/" + PID + "/comm");
-    string content((std::istreambuf_iterator<char>(fin)), (std::istreambuf_iterator<char>()));
-    vector<string> num;
-    istringstream iss(content);
-    for (string s; iss >> s;)
-    {
-        *COMMAND = s;
-        break;
-    }
+    string content;
+    if (fin >> *COMMAND) return true;
+    return false;
 }
 
 void get_user(string *USER, string PID)
 {
     uid_t UID = 0;
     struct stat fileInfo;
-    stat(string("/proc/" + PID + "/status").c_str(), &fileInfo);
+    stat(string("/proc/" + PID).c_str(), &fileInfo);
     UID = fileInfo.st_uid;
-    struct passwd *user;
-    user = getpwuid(UID);
-    *USER = user->pw_name;
+    ifstream fin("/etc/passwd");
+    string content;
+    while(getline(fin, content))
+    {
+        size_t pos = content.find(":");
+        while(pos != content.npos)
+        {
+            content.replace(pos, 1, " ");
+            pos = content.find(":");
+        }
+        stringstream tt;
+        string tmp_name, tmp, tmp_uid;
+        tt << content;
+        tt >> tmp_name;
+        tt >> tmp;
+        tt >> tmp_uid;
+        if(tmp_uid == to_string(UID))
+        {
+            *USER = tmp_name;
+            break;
+        }
+    }
 }
 
 void get_inode(string *NODE, string dir)
@@ -52,75 +67,86 @@ void get_inode(string *NODE, string dir)
 
 void get_type(string *TYPE, string dir)
 {
-    if (is_dir(dir))
+    struct stat fileInfo;
+    stat(dir.c_str(), &fileInfo);
+    if (S_ISDIR(fileInfo.st_mode))
         *TYPE = "DIR";
-    else if (is_reg(dir))
+    else if (S_ISREG(fileInfo.st_mode))
         *TYPE = "REG";
-    else if (is_chr(dir))
+    else if (S_ISCHR(fileInfo.st_mode))
         *TYPE = "CHR";
-    else if (is_fifo(dir))
+    else if (S_ISFIFO(fileInfo.st_mode))
         *TYPE = "FIFO";
-    else if (is_sock(dir))
+    else if (S_ISSOCK(fileInfo.st_mode))
         *TYPE = "SOCK";
     else
         *TYPE = "unknown";
 }
 
-void get_cwd_info(string *NAME, string *NODE, string *TYPE, string PID)
+void get_cwd_info(string *NAME, string *APPEND, string *NODE, string *TYPE, string PID)
 {
     char buff[1024];
     string dir = string("/proc/" + PID + "/cwd");
     ssize_t len = readlink(dir.c_str(), buff, sizeof(buff) - 1);
     if (errno == EACCES)
     {
-        *NAME = "/proc/" + PID + "/cwd (readlink: Permission denied)";
+        *NAME = "/proc/" + PID + "/cwd";
+        *APPEND = "(readlink: Permission denied)";
         *NODE = "";
+        *TYPE = "unknown";
     }
     if (len != -1)
     {
         buff[len] = '\0';
         *NAME = string(buff);
+        *APPEND = "";
         get_inode(NODE, dir);
+        get_type(TYPE, dir);
     }
-    get_type(TYPE, dir);
 }
 
-void get_root_info(string *NAME, string *NODE, string *TYPE, string PID)
+void get_root_info(string *NAME, string *APPEND, string *NODE, string *TYPE, string PID)
 {
     char buff[1024];
     string dir = string("/proc/" + PID + "/root");
     ssize_t len = readlink(dir.c_str(), buff, sizeof(buff) - 1);
     if (errno == EACCES)
     {
-        *NAME = "/proc/" + PID + "/root (readlink: Permission denied)";
+        *NAME = "/proc/" + PID + "/root";
+        *APPEND = "(readlink: Permission denied)";
         *NODE = "";
+        *TYPE = "unknown";
     }
     if (len != -1)
     {
         buff[len] = '\0';
         *NAME = string(buff);
+        *APPEND = "";
         get_inode(NODE, dir);
+        get_type(TYPE, dir);
     }
-    get_type(TYPE, dir);
 }
 
-void get_exe_info(string *NAME, string *NODE, string *TYPE, string PID)
+void get_exe_info(string *NAME, string *APPEND, string *NODE, string *TYPE, string PID)
 {
     char buff[BUF_SIZE];
     string dir = string("/proc/" + PID + "/exe");
     ssize_t len = readlink(dir.c_str(), buff, sizeof(buff) - 1);
     if (errno == EACCES)
     {
-        *NAME = "/proc/" + PID + "/exe (readlink: Permission denied)";
+        *NAME = "/proc/" + PID + "/exe";
+        *APPEND = "(readlink: Permission denied)";
         *NODE = "";
+        *TYPE = "unknown";
     }
     if (len != -1)
     {
         buff[len] = '\0';
         *NAME = string(buff);
+        *APPEND = "";
         get_inode(NODE, dir);
+        get_type(TYPE, dir);
     }
-    get_type(TYPE, dir);
 }
 
 void get_mem_info(string PID, vector<mem_info> &MI)
@@ -129,28 +155,44 @@ void get_mem_info(string PID, vector<mem_info> &MI)
     vector<string> mem_line;
     vector<mem_info> mi, no_dup_mi;
     ifstream fin(string("/proc/" + PID + "/maps"));
-    string content((std::istreambuf_iterator<char>(fin)), (std::istreambuf_iterator<char>()));
-    // size_t heap_pos = content.find("[heap]");
-    // size_t stack_pos = content.rfind("[stack]");
-    // content = content.substr(heap_pos + 7, stack_pos - heap_pos);
-
-    stringstream ss(content);
+    
     string tmp;
-    while (getline(ss, tmp, '\n'))
+    while (getline(fin, tmp))
     {
         mem.push_back(tmp);
     }
 
     for (int i = 0; i < mem.size(); i++)
     {
-        istringstream iss(mem[i]);
+        stringstream iss(mem[i]);
         for (string s; iss >> s;)
             mem_line.push_back(s);
         if (mem_line[4] != "0")
         {
             mem_info mem_tmp;
             mem_tmp.inode = mem_line[4];
-            mem_tmp.name = mem_line[5];
+            int idx = 5;
+            bool deleted = 0;
+            mem_tmp.name = mem_line[idx];
+            // larger than 6 means deleted or space
+            if(mem_line.size() > 6)
+            {
+                while(idx < mem_line.size())
+                {
+                    idx++;
+                    if(mem_line[idx] != "(deleted)")
+                        mem_tmp.name += (" " + mem_line[idx]);
+                    else
+                    {
+                        deleted = 1;
+                        break;
+                    }
+                }
+                
+                if (deleted)
+                    mem_tmp.append =  mem_line[idx];
+            }
+                
             mi.push_back(mem_tmp);
         }
         mem_line.clear();
@@ -177,9 +219,7 @@ void get_mem_info(string PID, vector<mem_info> &MI)
     // deal with deleted files
     for (int i = 0; i < no_dup_mi.size(); i++)
     {
-        string::size_type pos;
-        pos = no_dup_mi[i].name.find("(deleted)");
-        if (pos != no_dup_mi[i].name.npos)
+        if(no_dup_mi[i].append == "(deleted)")
         {
             no_dup_mi[i].fd = "del";
             no_dup_mi[i].type = "unknown";
@@ -188,6 +228,17 @@ void get_mem_info(string PID, vector<mem_info> &MI)
         {
             no_dup_mi[i].fd = "mem";
             no_dup_mi[i].type = "REG";
+        }
+    }
+
+    // deal with anon_inode
+    for (int i = 0; i < no_dup_mi.size(); i++)
+    {
+        string::size_type pos;
+        pos = no_dup_mi[i].name.find("anon_inode:");
+        if (pos != no_dup_mi[i].name.npos)
+        {
+            no_dup_mi[i].name = "anon_inode:[" + no_dup_mi[i].inode + "]";
         }
     }
 
@@ -213,21 +264,12 @@ void get_rwu_info(string PID, vector<string> &fd_files, vector<fd_info> &FDI)
             else
                 fin >> garbage;
         }
-        if (mode & O_RDONLY)
-            fd_mode = "r";
-        else if (mode & O_WRONLY)
+        if (mode & O_WRONLY)
             fd_mode = "w";
         else if (mode & O_RDWR)
             fd_mode = "u";
-
-        // struct stat fileInfo;
-        // lstat(string("/proc/" + PID + "/fd/" + fd_files[i]).c_str(), &fileInfo);
-        // if (fileInfo.st_mode & S_IRUSR && !(fileInfo.st_mode & S_IWUSR))
-        //     fd_mode = "r";
-        // else if (fileInfo.st_mode & S_IWUSR && !(fileInfo.st_mode & S_IRUSR))
-        //     fd_mode = "w";
-        // else if (fileInfo.st_mode & S_IWUSR && fileInfo.st_mode & S_IRUSR)
-        //     fd_mode = "u";
+        else
+            fd_mode = "r";
 
         string fname = "/proc/" + PID + "/fd/" + fd_files[i];
         get_type(&fd_type, fname);
@@ -243,10 +285,23 @@ void get_rwu_info(string PID, vector<string> &fd_files, vector<fd_info> &FDI)
             get_inode(&fditmp.inode, fname);
         }
         string::size_type pos;
-        pos = fditmp.name.find("(deleted)");
+        pos = fditmp.name.find("(deleted");
         if (pos != fditmp.name.npos)
-            fd_type = "unknown";
+            {
+                fd_type = "unknown";
+                fditmp.name = fditmp.name.substr(0, pos);
+                fditmp.append = "(deleted)";
+            }
         fditmp.type = fd_type;
+
+        // deal with anon_inode
+        string::size_type anon_pos;
+        anon_pos = fditmp.name.find("anon_inode:");
+        if (anon_pos != fditmp.name.npos)
+        {
+            fditmp.name = "anon_inode:[" + fditmp.inode + "]";
+        }
+
         FDI.push_back(fditmp);
     }
 }
@@ -282,25 +337,29 @@ void get_all_process_files(string baseDir, bool recursive)
 void get_process_info(path_pid dir)
 {
     // need to handle COMMAND, PID, USER, FD, TYPE, NODE, NAME
-    string COMMAND = "", PID = dir.pid, USER = "", TYPE = "", NODE = "", NAME = "";
+    string COMMAND = "", PID = dir.pid, USER = "", TYPE = "", NODE = "", NAME = "", APPEND = "";
     line tmp_line;
+    bool flag = true;
 
-    get_command(&COMMAND, PID);
+    flag = get_command(&COMMAND, PID);
+    if(!flag){
+        return;
+    }
     get_user(&USER, PID);
     // five steps to deal with: cwd, root, exe, mem, rwu
     // 1. cwd
-    get_cwd_info(&NAME, &NODE, &TYPE, PID);
-    tmp_line = {COMMAND, PID, USER, "cwd", TYPE, NODE, NAME};
+    get_cwd_info(&NAME, &APPEND, &NODE, &TYPE, PID);
+    tmp_line = {COMMAND, PID, USER, "cwd", TYPE, NODE, NAME, APPEND};
     print(lines, tmp_line);
 
     // 2. root
-    get_root_info(&NAME, &NODE, &TYPE, PID);
-    tmp_line = {COMMAND, PID, USER, "root", TYPE, NODE, NAME};
+    get_root_info(&NAME, &APPEND, &NODE, &TYPE, PID);
+    tmp_line = {COMMAND, PID, USER, "root", TYPE, NODE, NAME, APPEND};
     print(lines, tmp_line);
 
     // 3. exe
-    get_exe_info(&NAME, &NODE, &TYPE, PID);
-    tmp_line = {COMMAND, PID, USER, "exe", TYPE, NODE, NAME};
+    get_exe_info(&NAME, &APPEND, &NODE, &TYPE, PID);
+    tmp_line = {COMMAND, PID, USER, "exe", TYPE, NODE, NAME, APPEND};
     print(lines, tmp_line);
 
     // handle nofd
@@ -329,14 +388,14 @@ void get_process_info(path_pid dir)
     get_mem_info(PID, MI);
     for (int i = 0; i < MI.size(); i++)
     {
-        tmp_line = {COMMAND, PID, USER, MI[i].fd, MI[i].type, MI[i].inode, MI[i].name};
+        tmp_line = {COMMAND, PID, USER, MI[i].fd, MI[i].type, MI[i].inode, MI[i].name, MI[i].append};
         print(lines, tmp_line);
     }
     MI.clear();
 
     if (nofd_flag)
     {
-        tmp_line = {COMMAND, PID, USER, "NOFD", "", "", "/proc/" + PID + "/fd (opendir: Permission denied)"};
+        tmp_line = {COMMAND, PID, USER, "NOFD", "", "", "/proc/" + PID + "/fd", "(opendir: Permission denied)"};
         print(lines, tmp_line);
         return;
     }
@@ -345,7 +404,7 @@ void get_process_info(path_pid dir)
     get_rwu_info(PID, fd_files, FDI);
     for (int i = 0; i < fd_files.size(); i++)
     {
-        tmp_line = {COMMAND, PID, USER, FDI[i].fd, FDI[i].type, FDI[i].inode, FDI[i].name};
+        tmp_line = {COMMAND, PID, USER, FDI[i].fd, FDI[i].type, FDI[i].inode, FDI[i].name, FDI[i].append};
         print(lines, tmp_line);
     }
     FDI.clear();
@@ -370,7 +429,7 @@ int main(int argc, char *argv[])
         case 't':
             if (string(optarg) != "REG" && string(optarg) != "CHR" && string(optarg) != "DIR" && string(optarg) != "FIFO" && string(optarg) != "SOCK" && string(optarg) != "unknown")
             {
-                cout << "Invalid TYPE option.\n";
+                cerr << "Invalid TYPE option.\n";
                 exit(1);
             }
             parse_result.t = 1;
@@ -383,7 +442,7 @@ int main(int argc, char *argv[])
             arg_flag = 1;
             break;
         case '?':
-            cout << "Error arguments.\n";
+            cerr << "Error arguments.\n";
             exit(1);
         }
     }

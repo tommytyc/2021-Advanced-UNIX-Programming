@@ -17,7 +17,7 @@ void print_all(vector<line> &lines, bool arg_flag, arguments parse_result)
     if (!arg_flag)
     {
         for (int i = 0; i < lines.size(); i++)
-            cout << lines[i].COMMAND << "\t\t" << lines[i].PID << "\t\t" << lines[i].USER << "\t\t" << lines[i].FD << "\t\t" << lines[i].TYPE << "\t\t" << lines[i].NODE << "\t\t" << lines[i].NAME << endl;
+            cout << lines[i].COMMAND << "\t\t" << lines[i].PID << "\t\t" << lines[i].USER << "\t\t" << lines[i].FD << "\t\t" << lines[i].TYPE << "\t\t" << lines[i].NODE << "\t\t" << lines[i].NAME + " " + lines[i].APPEND << endl;
     }
     else
     {
@@ -56,7 +56,7 @@ void print_all(vector<line> &lines, bool arg_flag, arguments parse_result)
             else
                 output_flag[2] = 1;
             if (output_flag[0] & output_flag[1] & output_flag[2])
-                cout << lines[i].COMMAND << "\t\t" << lines[i].PID << "\t\t" << lines[i].USER << "\t\t" << lines[i].FD << "\t\t" << lines[i].TYPE << "\t\t" << lines[i].NODE << "\t\t" << lines[i].NAME << endl;
+                cout << lines[i].COMMAND << "\t\t" << lines[i].PID << "\t\t" << lines[i].USER << "\t\t" << lines[i].FD << "\t\t" << lines[i].TYPE << "\t\t" << lines[i].NODE << "\t\t" << lines[i].NAME + " " + lines[i].APPEND << endl;
         }
     }
 }
@@ -76,62 +76,6 @@ bool is_dir(string dir)
     struct stat fileInfo;
     stat(dir.c_str(), &fileInfo);
     if (S_ISDIR(fileInfo.st_mode))
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }
-}
-
-bool is_reg(string dir)
-{
-    struct stat fileInfo;
-    stat(dir.c_str(), &fileInfo);
-    if (S_ISREG(fileInfo.st_mode))
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }
-}
-
-bool is_chr(string dir)
-{
-    struct stat fileInfo;
-    stat(dir.c_str(), &fileInfo);
-    if (S_ISCHR(fileInfo.st_mode))
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }
-}
-
-bool is_fifo(string dir)
-{
-    struct stat fileInfo;
-    stat(dir.c_str(), &fileInfo);
-    if (S_ISFIFO(fileInfo.st_mode))
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }
-}
-
-bool is_sock(string dir)
-{
-    struct stat fileInfo;
-    stat(dir.c_str(), &fileInfo);
-    if (S_ISSOCK(fileInfo.st_mode))
     {
         return true;
     }
