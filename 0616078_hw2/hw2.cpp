@@ -70,8 +70,9 @@ int main(int argc, char *argv[])
     }
     else
     {
-        int outfd = open(out_file.c_str(), O_RDWR | O_APPEND);
+        int outfd = open(out_file.c_str(), O_RDWR | O_CREAT);
         dup2(outfd, 2);
+        close(outfd);
     }
     setenv("LD_PRELOAD", so_path.c_str(), 1);
 

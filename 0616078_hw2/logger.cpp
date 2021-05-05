@@ -31,14 +31,14 @@ typedef FILE* (*or_tmpfile)(void);
 typedef FILE* (*or_tmpfile64)(void);
 typedef ssize_t (*or_write)(int fd, const void *buf, size_t count); //skip
 
-or_write old_write = (or_write)dlsym(RTLD_NEXT, "write");
-
 void print(string str)
 {
+    or_write old_write = (or_write)dlsym(RTLD_NEXT, "write");
     old_write(2, str.c_str(), strlen(str.c_str()));
 }
 
 void print_ptr(void *p) {
+    or_write old_write = (or_write)dlsym(RTLD_NEXT, "write");
     uintptr_t x = (uintptr_t)p;
     char buf[20];
     sprintf(buf, "%p", p);
@@ -56,6 +56,7 @@ void print_ptr(void *p) {
 
 void print_logger()
 {
+    or_write old_write = (or_write)dlsym(RTLD_NEXT, "write");
     string str = "[logger] ";
     old_write(2, str.c_str(), strlen(str.c_str()));
 }
@@ -347,10 +348,11 @@ size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream)
 
 int open(const char *pathname, int flags, ...)
 {
+    mode_t mode = 0;
     or_open or_func = (or_open)dlsym(RTLD_NEXT, "open");
     string to_print = "open(";
     int ret = 0;
-    char long_path[100] = {0};
+    char long_path[100] = {0}, mode_str[10] = {0};
     char* exist = realpath(pathname, long_path);
     if(exist != NULL)
         to_print += "\"" + string(long_path) + "\", ";
@@ -362,18 +364,17 @@ int open(const char *pathname, int flags, ...)
     {
         va_list args;
         va_start(args, flags);
-        mode_t mode = va_arg(args, int);
+        mode = va_arg(args, int);
         va_end(args);
-        char mode_str[10];
         sprintf(mode_str, "%o", mode);
-        to_print += ", " + string(mode_str) + ") = ";
         ret = or_func(pathname, flags, mode);
     }
     else
     {
         ret = or_func(pathname, flags);
-        to_print += ") = ";
+        sprintf(mode_str, "%o", mode);
     }
+    to_print += ", " + string(mode_str) + ") = ";
 
     print_logger();
     to_print += to_string(ret) + "\n";
@@ -383,10 +384,11 @@ int open(const char *pathname, int flags, ...)
 
 int open64(const char *pathname, int flags, ...)
 {
-    or_open64 or_func = (or_open64)dlsym(RTLD_NEXT, "open64");
-    string to_print = "open64(";
+    mode_t mode = 0;
+    or_open or_func = (or_open)dlsym(RTLD_NEXT, "open");
+    string to_print = "open(";
     int ret = 0;
-    char long_path[100] = {0};
+    char long_path[100] = {0}, mode_str[10] = {0};
     char* exist = realpath(pathname, long_path);
     if(exist != NULL)
         to_print += "\"" + string(long_path) + "\", ";
@@ -398,16 +400,17 @@ int open64(const char *pathname, int flags, ...)
     {
         va_list args;
         va_start(args, flags);
-        int mode = va_arg(args, int);
+        mode = va_arg(args, int);
         va_end(args);
-        to_print += ", " + to_string(mode) + ") = ";
+        sprintf(mode_str, "%o", mode);
         ret = or_func(pathname, flags, mode);
     }
     else
     {
         ret = or_func(pathname, flags);
-        to_print += ") = ";
+        sprintf(mode_str, "%o", mode);
     }
+    to_print += ", " + string(mode_str) + ") = ";
 
     print_logger();
     to_print += to_string(ret) + "\n";
@@ -483,6 +486,7 @@ FILE* tmpfile64(void)
 
 ssize_t write(int fd, const void *buf, size_t count)
 {
+    or_write old_write = (or_write)dlsym(RTLD_NEXT, "write");
     string to_print = "write(";
     string str_fd = to_string(fd), path;
     char buff[1024];

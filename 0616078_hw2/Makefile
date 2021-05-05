@@ -10,4 +10,4 @@ logger.so: logger.cpp
 
 .PHONY: clean
 clean:
-	rm *.o logger.so logger
+	rm logger.so logger
