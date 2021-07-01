@@ -1,0 +1,69 @@
+help
+h
+b
+c
+delete
+d
+x
+g
+getregs
+l
+vmmap
+s
+si
+start
+r
+
+load hello64
+
+break
+cont
+delete
+disasm
+dump
+get
+getregs
+list
+vmmap
+set
+si
+
+start
+run
+start
+
+getregs
+disasm 0x4000b0
+dump 0x4000c6
+vmmap
+
+list
+b 0x4000b0
+disasm
+list
+b 0x4000b0
+list
+cont
+delete 0
+list
+
+get rip
+si
+get rip
+si
+get rip
+
+b 0x4000c6
+list
+get rip
+set rip 0x4000b0
+get rip
+cont
+get rip
+set rip 0x4000b0
+get rip
+cont
+cont
+
+q
+help

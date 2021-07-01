@@ -1,0 +1,42 @@
+load hello64
+start
+b 0x4000c6
+cont
+delete 0
+si
+
+set rip 0x4000b0
+b 0x4000c6
+b 0x4000d0
+cont
+cont
+delete 1
+delete 2
+
+set rip 0x4000b0
+disasm 4000b0
+b 0x4000c6
+b 0x4000cb
+b 0x4000d0
+list
+dump 4000d0
+cont
+cont
+cont
+disasm 0x4000b0
+dump 0x4000b0
+
+
+set rip 0x4000b0
+delete 4
+delete 5
+si
+si
+si
+si
+si
+si
+
+set rip 0x4000b0
+delete 3
+cont
